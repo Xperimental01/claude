@@ -1,7 +1,7 @@
 "use client";
 import { useState, useEffect, useMemo } from "react";
 import { Event } from "@/types/event";
-import { DELHI_NCR_EVENTS, getUpcomingEvents, searchEvents } from "@/lib/events-data";
+import { ALL_EVENTS, getUpcomingEvents, searchEvents } from "@/lib/events-data";
 import EventCard from "./EventCard";
 import FilterBar from "./FilterBar";
 import StatsBar from "./StatsBar";
@@ -31,7 +31,7 @@ export default function Dashboard() {
   }, []);
 
   const filteredEvents = useMemo(() => {
-    let events = getUpcomingEvents(DELHI_NCR_EVENTS);
+    let events = getUpcomingEvents(ALL_EVENTS);
 
     if (searchQuery) events = searchEvents(searchQuery, events);
     if (selectedCategory !== "all") events = events.filter((e) => e.category === selectedCategory);

@@ -1,4 +1,5 @@
 import { Event } from "@/types/event";
+import fetchedEventsRaw from "@/data/fetched-events.json";
 
 export const DELHI_NCR_EVENTS: Event[] = [
   {
@@ -492,6 +493,15 @@ export const DELHI_NCR_EVENTS: Event[] = [
     tags: ["Web3", "Blockchain", "DeFi", "Crypto", "NFT"],
     sourceUrl: "https://www.bharatweb3.org",
   },
+];
+
+const FETCHED_EVENTS = fetchedEventsRaw as Event[];
+
+export const ALL_EVENTS: Event[] = [
+  ...DELHI_NCR_EVENTS,
+  ...FETCHED_EVENTS.filter(
+    (fe) => !DELHI_NCR_EVENTS.some((e) => e.name.toLowerCase() === fe.name.toLowerCase())
+  ),
 ];
 
 export function getEventsByCategory(category: string, events: Event[]) {
