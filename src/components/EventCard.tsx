@@ -1,6 +1,5 @@
 "use client";
-import { useState } from "react";
-import { Event, CATEGORY_META } from "@/types/event";
+import { Event, CATEGORY_META, TICKET_STATUS_META } from "@/types/event";
 import CategoryBadge from "./CategoryBadge";
 import { format, parseISO } from "date-fns";
 
@@ -24,29 +23,42 @@ function daysUntil(dateStr: string) {
   return `In ${diff} days`;
 }
 
-export default function EventCard({ event }: { event: Event }) {
-  const [expanded, setExpanded] = useState(false);
+export default function EventCard({
+  event,
+  onOpenDetail,
+}: {
+  event: Event;
+  onOpenDetail: (e: Event) => void;
+}) {
   const meta = CATEGORY_META[event.category];
+  const status = TICKET_STATUS_META[event.ticket.status];
   const until = daysUntil(event.date);
   const isUrgent = until === "Today" || until === "Tomorrow";
+  const isSoldOut = event.ticket.status === "sold-out" || event.ticket.status === "closed";
+
+  const deadlinePassed = event.ticket.registrationDeadline
+    ? new Date(event.ticket.registrationDeadline) < new Date()
+    : false;
 
   return (
     <div
-      className={`relative bg-white rounded-xl border shadow-sm hover:shadow-md transition-shadow duration-200 overflow-hidden flex flex-col ${event.featured ? "ring-2 ring-indigo-400" : ""}`}
+      className={`relative bg-white rounded-xl border shadow-sm hover:shadow-md transition-shadow duration-200 overflow-hidden flex flex-col cursor-pointer ${
+        event.featured ? "ring-2 ring-indigo-400" : ""
+      } ${isSoldOut ? "opacity-75" : ""}`}
+      onClick={() => onOpenDetail(event)}
     >
       {event.featured && (
         <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-indigo-500 via-purple-500 to-pink-500" />
       )}
 
       <div className={`px-5 pt-5 pb-4 ${event.featured ? "pt-6" : ""}`}>
-        {/* Header row */}
         <div className="flex items-start justify-between gap-3 mb-3">
           <div className="flex-1 min-w-0">
             <div className="flex flex-wrap items-center gap-2 mb-1.5">
               <CategoryBadge category={event.category} />
               {event.featured && (
                 <span className="text-xs font-semibold text-indigo-600 bg-indigo-50 border border-indigo-200 px-2 py-0.5 rounded-full">
-                  ⭐ Featured
+                  Featured
                 </span>
               )}
               <span
@@ -70,7 +82,6 @@ export default function EventCard({ event }: { event: Event }) {
           </div>
         </div>
 
-        {/* Venue */}
         <div className="flex items-start gap-1.5 mb-3">
           <span className="text-slate-400 mt-0.5 shrink-0">📍</span>
           <div>
@@ -79,7 +90,6 @@ export default function EventCard({ event }: { event: Event }) {
           </div>
         </div>
 
-        {/* Format + attendees */}
         <div className="flex items-center gap-3 mb-3">
           <span
             className={`text-xs px-2 py-0.5 rounded-full font-medium border ${
@@ -90,84 +100,68 @@ export default function EventCard({ event }: { event: Event }) {
                 : "bg-purple-50 text-purple-700 border-purple-200"
             }`}
           >
-            {event.format === "in-person" ? "🏛 In-Person" : event.format === "hybrid" ? "🔀 Hybrid" : "💻 Online"}
+            {event.format === "in-person" ? "In-Person" : event.format === "hybrid" ? "Hybrid" : "Online"}
           </span>
           {event.expectedAttendees && (
-            <span className="text-xs text-slate-500">👥 {event.expectedAttendees}</span>
+            <span className="text-xs text-slate-500">{event.expectedAttendees}</span>
           )}
         </div>
 
-        {/* Description */}
         <p className="text-sm text-slate-600 leading-relaxed line-clamp-3">{event.description}</p>
+
+        {/* Ticket tiers preview */}
+        {event.ticket.tiers && event.ticket.tiers.length > 0 && (
+          <div className="mt-3 flex flex-wrap gap-1">
+            {event.ticket.tiers.map((tier, i) => {
+              const ts = TICKET_STATUS_META[tier.status];
+              return (
+                <span
+                  key={i}
+                  className={`text-[10px] font-semibold px-1.5 py-0.5 rounded border ${ts.bg} ${ts.color} ${ts.border} ${tier.status === "sold-out" ? "line-through opacity-60" : ""}`}
+                >
+                  {tier.name}: {tier.price}
+                </span>
+              );
+            })}
+          </div>
+        )}
       </div>
 
-      {/* Expandable section */}
-      <button
-        onClick={() => setExpanded(!expanded)}
-        className="mx-5 mb-3 text-xs font-semibold text-indigo-600 hover:text-indigo-800 text-left transition-colors"
-      >
-        {expanded ? "▲ Show less" : "▼ View full details"}
-      </button>
-
-      {expanded && (
-        <div className="px-5 pb-4 border-t border-slate-100 pt-4 space-y-4">
-          {/* Highlights */}
-          <div>
-            <div className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">
-              What to expect
-            </div>
-            <ul className="space-y-1.5">
-              {event.highlights.map((h, i) => (
-                <li key={i} className="flex items-start gap-2 text-sm text-slate-700">
-                  <span className="text-indigo-400 mt-0.5 shrink-0">✓</span>
-                  {h}
-                </li>
-              ))}
-            </ul>
-          </div>
-
-          {/* Organizer */}
-          <div>
-            <div className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">
-              Organiser
-            </div>
-            <div className="text-sm text-slate-700">{event.organizer}</div>
-          </div>
-
-          {/* Tags */}
-          <div className="flex flex-wrap gap-1.5">
-            {event.tags.map((tag) => (
-              <span
-                key={tag}
-                className="text-xs px-2 py-0.5 bg-slate-100 text-slate-600 rounded-full border border-slate-200"
-              >
-                #{tag}
-              </span>
-            ))}
-          </div>
-        </div>
-      )}
+      {/* View details prompt */}
+      <div className="mx-5 mb-3">
+        <span className="text-xs font-semibold text-indigo-600 hover:text-indigo-800 transition-colors">
+          View full details & booking guide →
+        </span>
+      </div>
 
       {/* Ticket footer */}
       <div className={`mt-auto px-5 py-3 border-t flex items-center justify-between gap-3 ${meta.bg}`}>
         <div>
-          <div className="text-xs text-slate-500 font-medium">Ticket</div>
+          <div className="flex items-center gap-2 mb-0.5">
+            <span className={`inline-flex items-center gap-1 text-xs font-bold ${status.color}`}>
+              <span className={`w-1.5 h-1.5 rounded-full ${status.dot}`} />
+              {status.label}
+            </span>
+          </div>
           <div className="text-sm font-bold text-slate-800">{event.ticket.price ?? "N/A"}</div>
           {event.ticket.platform && (
             <div className="text-xs text-slate-500">via {event.ticket.platform}</div>
           )}
         </div>
-        {event.ticket.available && event.ticket.link ? (
+        {!isSoldOut && !deadlinePassed && event.ticket.link ? (
           <a
             href={event.ticket.link}
             target="_blank"
             rel="noopener noreferrer"
+            onClick={(e) => e.stopPropagation()}
             className="inline-flex items-center gap-1.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold px-4 py-2 rounded-lg transition-colors shrink-0"
           >
             Get Tickets →
           </a>
         ) : (
-          <span className="text-xs font-semibold text-slate-400 italic">Not available</span>
+          <span className={`text-xs font-bold italic ${status.color}`}>
+            {isSoldOut ? "Sold Out / Closed" : deadlinePassed ? "Deadline Passed" : "Not available"}
+          </span>
         )}
       </div>
     </div>

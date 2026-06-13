@@ -3,8 +3,10 @@ import { useState, useEffect, useMemo } from "react";
 import { Event } from "@/types/event";
 import { ALL_EVENTS, getUpcomingEvents, searchEvents } from "@/lib/events-data";
 import EventCard from "./EventCard";
+import EventModal from "./EventModal";
 import FilterBar from "./FilterBar";
 import StatsBar from "./StatsBar";
+import ChatAssistant from "./ChatAssistant";
 import { format } from "date-fns";
 
 function groupByMonth(events: Event[]): Record<string, Event[]> {
@@ -25,13 +27,16 @@ export default function Dashboard() {
   const [searchQuery, setSearchQuery] = useState("");
   const [sortBy, setSortBy] = useState("date-asc");
   const [viewMode, setViewMode] = useState<"grid" | "timeline">("grid");
+  const [selectedEvent, setSelectedEvent] = useState<Event | null>(null);
 
   useEffect(() => {
     setLastRefresh(new Date());
   }, []);
 
+  const allUpcoming = useMemo(() => getUpcomingEvents(ALL_EVENTS), []);
+
   const filteredEvents = useMemo(() => {
-    let events = getUpcomingEvents(ALL_EVENTS);
+    let events = [...allUpcoming];
 
     if (searchQuery) events = searchEvents(searchQuery, events);
     if (selectedCategory !== "all") events = events.filter((e) => e.category === selectedCategory);
@@ -42,7 +47,7 @@ export default function Dashboard() {
     if (sortBy === "name") events = [...events].sort((a, b) => a.name.localeCompare(b.name));
 
     return events;
-  }, [searchQuery, selectedCategory, selectedArea, selectedFormat, sortBy]);
+  }, [allUpcoming, searchQuery, selectedCategory, selectedArea, selectedFormat, sortBy]);
 
   const grouped = useMemo(() => groupByMonth(filteredEvents), [filteredEvents]);
 
@@ -71,13 +76,13 @@ export default function Dashboard() {
                   onClick={() => setViewMode("grid")}
                   className={`px-3 py-1.5 text-xs font-semibold transition-colors ${viewMode === "grid" ? "bg-indigo-600 text-white" : "bg-white text-slate-600 hover:bg-slate-50"}`}
                 >
-                  ⊞ Grid
+                  Grid
                 </button>
                 <button
                   onClick={() => setViewMode("timeline")}
                   className={`px-3 py-1.5 text-xs font-semibold transition-colors ${viewMode === "timeline" ? "bg-indigo-600 text-white" : "bg-white text-slate-600 hover:bg-slate-50"}`}
                 >
-                  📅 Timeline
+                  Timeline
                 </button>
               </div>
             </div>
@@ -97,10 +102,14 @@ export default function Dashboard() {
               <div className="flex flex-wrap gap-2 mt-3">
                 {["New Delhi", "Gurugram", "Noida", "Faridabad"].map((city) => (
                   <span key={city} className="text-xs bg-white/20 text-white px-2.5 py-1 rounded-full font-medium">
-                    📍 {city}
+                    {city}
                   </span>
                 ))}
               </div>
+              <p className="text-indigo-200 text-xs mt-3">
+                Click any event card for full details, ticket tiers, and step-by-step booking guide.
+                Use the AI assistant (bottom-right) for help finding events and buying tickets.
+              </p>
             </div>
             <div className="text-right">
               <div className="text-4xl font-black text-white">{filteredEvents.length}</div>
@@ -143,7 +152,7 @@ export default function Dashboard() {
               }}
               className="text-xs font-semibold text-indigo-600 hover:text-indigo-800 border border-indigo-200 px-3 py-1 rounded-full hover:bg-indigo-50 transition-colors"
             >
-              Clear filters ✕
+              Clear filters
             </button>
           )}
         </div>
@@ -155,14 +164,12 @@ export default function Dashboard() {
             <div className="text-sm mt-1">Try adjusting your filters or search query</div>
           </div>
         ) : viewMode === "grid" ? (
-          /* Grid view */
           <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5">
             {filteredEvents.map((event) => (
-              <EventCard key={event.id} event={event} />
+              <EventCard key={event.id} event={event} onOpenDetail={setSelectedEvent} />
             ))}
           </div>
         ) : (
-          /* Timeline view — grouped by month */
           <div className="space-y-10">
             {Object.entries(grouped).map(([month, events]) => (
               <div key={month}>
@@ -175,7 +182,7 @@ export default function Dashboard() {
                 </div>
                 <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5">
                   {events.map((event) => (
-                    <EventCard key={event.id} event={event} />
+                    <EventCard key={event.id} event={event} onOpenDetail={setSelectedEvent} />
                   ))}
                 </div>
               </div>
@@ -190,6 +197,14 @@ export default function Dashboard() {
           <div className="mt-2">Last refreshed: {format(lastRefresh, "EEEE, dd MMMM yyyy 'at' hh:mm a")}</div>
         </footer>
       </main>
+
+      {/* Event detail modal */}
+      {selectedEvent && (
+        <EventModal event={selectedEvent} onClose={() => setSelectedEvent(null)} />
+      )}
+
+      {/* AI Chat Assistant */}
+      <ChatAssistant events={allUpcoming} onSelectEvent={(e) => setSelectedEvent(e)} />
     </div>
   );
 }
