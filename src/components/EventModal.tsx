@@ -4,6 +4,8 @@ import { Event, CATEGORY_META, TICKET_STATUS_META } from "@/types/event";
 import CategoryBadge from "./CategoryBadge";
 import { googleCalendarUrl, mapsUrl, downloadIcs } from "@/lib/links";
 import { resolveTicketUrl, bookingButtonLabel, canBook } from "@/lib/ticket-resolver";
+import BookingHub from "./BookingHub";
+import TrustBadge from "./TrustBadge";
 import { useSavedEvents } from "@/hooks/useSavedEvents";
 import { format, parseISO } from "date-fns";
 
@@ -74,6 +76,7 @@ export default function EventModal({ event, onClose }: { event: Event; onClose: 
                   <span className={`w-1.5 h-1.5 rounded-full ${statusMeta.dot}`} />
                   {statusMeta.label}
                 </span>
+                <TrustBadge event={event} />
               </div>
               <h2 className="text-xl font-black text-slate-900 leading-snug">{event.name}</h2>
             </div>
@@ -223,6 +226,9 @@ export default function EventModal({ event, onClose }: { event: Event; onClose: 
               </div>
             </div>
           )}
+
+          {/* Every route to a real bookable page, best-first. */}
+          <BookingHub event={event} />
 
           {/* Booking steps */}
           {event.ticket.bookingSteps && event.ticket.bookingSteps.length > 0 && (

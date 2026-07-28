@@ -1,19 +1,24 @@
 "use client";
 import { useState, useEffect, useMemo } from "react";
 import { Event } from "@/types/event";
-import { ALL_EVENTS, getUpcomingEvents, searchEvents } from "@/lib/events-data";
+import {
+  ALL_EVENTS,
+  LIVE_EVENT_COUNT,
+  getUpcomingEvents,
+  searchEvents,
+} from "@/lib/events-data";
 import EventCard from "./EventCard";
 import EventModal from "./EventModal";
 import FilterBar from "./FilterBar";
 import StatsBar from "./StatsBar";
 import InsightsPanel from "./InsightsPanel";
 import CalendarView from "./CalendarView";
+import TrendingPanel from "./TrendingPanel";
+import Sidebar, { ViewMode } from "./Sidebar";
 import Countdown from "./Countdown";
 import ChatAssistant from "./ChatAssistant";
 import { useSavedEvents } from "@/hooks/useSavedEvents";
 import { format } from "date-fns";
-
-type ViewMode = "grid" | "timeline" | "calendar" | "insights";
 
 function groupByMonth(events: Event[]): Record<string, Event[]> {
   const groups: Record<string, Event[]> = {};
@@ -33,251 +38,310 @@ function parseMinPrice(price?: string): number {
 }
 
 export default function Dashboard() {
-  const [lastRefresh, setLastRefresh] = useState(new Date());
+  const [lastRefresh, setLastRefresh] = useState<Date | null>(null);
+  const [view, setView] = useState<ViewMode>("discover");
   const [selectedCategory, setSelectedCategory] = useState("all");
   const [selectedArea, setSelectedArea] = useState("All Areas");
   const [selectedFormat, setSelectedFormat] = useState("All Formats");
   const [searchQuery, setSearchQuery] = useState("");
   const [sortBy, setSortBy] = useState("date-asc");
-  const [viewMode, setViewMode] = useState<ViewMode>("grid");
   const [freeOnly, setFreeOnly] = useState(false);
-  const [savedOnly, setSavedOnly] = useState(false);
   const [selectedEvent, setSelectedEvent] = useState<Event | null>(null);
-  const [showInsights, setShowInsights] = useState(false);
+  const [navOpen, setNavOpen] = useState(false);
 
   const { saved, isSaved, count: savedCount } = useSavedEvents();
 
-  useEffect(() => { setLastRefresh(new Date()); }, []);
+  // Rendered only after mount so server and client markup agree.
+  useEffect(() => setLastRefresh(new Date()), []);
 
   const allUpcoming = useMemo(() => getUpcomingEvents(ALL_EVENTS), []);
-
-  // Featured event for hero countdown — the soonest featured event
-  const heroEvent = useMemo(
-    () => allUpcoming.find((e) => e.featured) ?? null,
-    [allUpcoming]
+  const liveCount = useMemo(
+    () => allUpcoming.filter((e) => e.sourceType === "live-api").length,
+    [allUpcoming],
   );
+  const sampleCount = allUpcoming.length - liveCount;
+
+  const heroEvent = useMemo(
+    () => allUpcoming.find((e) => e.featured) ?? allUpcoming[0] ?? null,
+    [allUpcoming],
+  );
+
+  const categoryCounts = useMemo(() => {
+    const counts: Record<string, number> = {};
+    for (const e of allUpcoming) counts[e.category] = (counts[e.category] ?? 0) + 1;
+    return counts;
+  }, [allUpcoming]);
 
   const filteredEvents = useMemo(() => {
     let events = [...allUpcoming];
 
-    if (savedOnly) events = events.filter((e) => isSaved(e.id));
+    if (view === "saved") events = events.filter((e) => isSaved(e.id));
     if (searchQuery) events = searchEvents(searchQuery, events);
     if (selectedCategory !== "all") events = events.filter((e) => e.category === selectedCategory);
     if (selectedArea !== "All Areas") events = events.filter((e) => e.area === selectedArea);
     if (selectedFormat !== "All Formats") events = events.filter((e) => e.format === selectedFormat);
-    if (freeOnly) events = events.filter(
-      (e) => e.ticket.status === "free" || e.ticket.price?.toLowerCase().includes("free")
-    );
+    if (freeOnly) {
+      events = events.filter(
+        (e) => e.ticket.status === "free" || e.ticket.price?.toLowerCase().includes("free"),
+      );
+    }
 
     if (sortBy === "date-desc") events = [...events].reverse();
     else if (sortBy === "name") events = [...events].sort((a, b) => a.name.localeCompare(b.name));
-    else if (sortBy === "price-asc") events = [...events].sort((a, b) => parseMinPrice(a.ticket.price) - parseMinPrice(b.ticket.price));
+    else if (sortBy === "price-asc") {
+      events = [...events].sort(
+        (a, b) => parseMinPrice(a.ticket.price) - parseMinPrice(b.ticket.price),
+      );
+    }
 
     return events;
-  }, [allUpcoming, savedOnly, searchQuery, selectedCategory, selectedArea, selectedFormat, freeOnly, sortBy, saved, isSaved]);
+  }, [
+    allUpcoming, view, searchQuery, selectedCategory, selectedArea,
+    selectedFormat, freeOnly, sortBy, saved, isSaved,
+  ]);
 
   const grouped = useMemo(() => groupByMonth(filteredEvents), [filteredEvents]);
 
   const activeFilters =
-    selectedCategory !== "all" || selectedArea !== "All Areas" ||
-    searchQuery || selectedFormat !== "All Formats" || freeOnly || savedOnly;
+    selectedCategory !== "all" ||
+    selectedArea !== "All Areas" ||
+    selectedFormat !== "All Formats" ||
+    !!searchQuery ||
+    freeOnly;
 
   const clearAll = () => {
-    setSelectedCategory("all"); setSelectedArea("All Areas");
-    setSelectedFormat("All Formats"); setSearchQuery("");
-    setFreeOnly(false); setSavedOnly(false);
+    setSelectedCategory("all");
+    setSelectedArea("All Areas");
+    setSelectedFormat("All Formats");
+    setSearchQuery("");
+    setFreeOnly(false);
   };
 
-  const views: Array<{ id: ViewMode; label: string; icon: string }> = [
-    { id: "grid", label: "Grid", icon: "⊞" },
-    { id: "timeline", label: "Timeline", icon: "☰" },
-    { id: "calendar", label: "Calendar", icon: "📅" },
-    { id: "insights", label: "Insights", icon: "📊" },
-  ];
+  const eventGrid = (events: Event[]) => (
+    <div className="grid grid-cols-1 gap-5 md:grid-cols-2 2xl:grid-cols-3">
+      {events.map((event) => (
+        <EventCard key={event.id} event={event} onOpenDetail={setSelectedEvent} />
+      ))}
+    </div>
+  );
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50">
+    <div className="min-h-screen bg-slate-50">
       {/* Header */}
-      <header className="bg-white border-b border-slate-200 shadow-sm sticky top-0 z-20">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex items-center justify-between h-16">
-            <div className="flex items-center gap-3">
-              <div className="w-9 h-9 rounded-lg bg-gradient-to-br from-indigo-600 to-purple-600 flex items-center justify-center text-white font-black text-base shadow">
-                D
-              </div>
-              <div>
-                <h1 className="font-black text-slate-900 text-base leading-none">Delhi NCR Events</h1>
-                <div className="flex items-center gap-1.5 mt-0.5">
-                  <span className="w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse" />
-                  <p className="text-[10px] text-slate-500">Live · Updated {format(lastRefresh, "dd MMM, hh:mm a")}</p>
-                </div>
+      <header className="sticky top-0 z-30 border-b border-slate-200 bg-white shadow-sm">
+        <div className="flex h-16 items-center justify-between gap-4 px-4 sm:px-6">
+          <div className="flex items-center gap-3">
+            <button
+              onClick={() => setNavOpen(true)}
+              aria-label="Open navigation"
+              className="rounded-lg border border-slate-200 px-2 py-1.5 text-slate-600 lg:hidden"
+            >
+              ☰
+            </button>
+            <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-gradient-to-br from-indigo-600 to-purple-600 text-base font-black text-white shadow">
+              D
+            </div>
+            <div>
+              <h1 className="text-base font-black leading-none text-slate-900">Delhi NCR Events</h1>
+              <div className="mt-0.5 flex items-center gap-1.5">
+                <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-green-400" />
+                <p className="text-[10px] text-slate-500">
+                  {lastRefresh
+                    ? `Loaded ${format(lastRefresh, "dd MMM, hh:mm a")}`
+                    : "Loading…"}
+                </p>
               </div>
             </div>
+          </div>
 
-            {/* View switcher */}
-            <div className="flex items-center border border-slate-200 rounded-lg overflow-hidden">
-              {views.map((v) => (
-                <button
-                  key={v.id}
-                  onClick={() => setViewMode(v.id)}
-                  className={`px-3 py-1.5 text-xs font-semibold transition-colors flex items-center gap-1 ${
-                    viewMode === v.id ? "bg-indigo-600 text-white" : "bg-white text-slate-600 hover:bg-slate-50"
-                  }`}
-                >
-                  <span className="hidden sm:inline">{v.icon}</span>
-                  {v.label}
-                </button>
-              ))}
-            </div>
+          <div className="hidden items-center gap-2 sm:flex">
+            <span className="rounded-full border border-green-200 bg-green-50 px-2.5 py-1 text-[11px] font-bold text-green-700">
+              {liveCount} live
+            </span>
+            <span className="rounded-full border border-amber-200 bg-amber-50 px-2.5 py-1 text-[11px] font-bold text-amber-700">
+              {sampleCount} sample
+            </span>
           </div>
         </div>
       </header>
 
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        {/* Hero banner */}
-        <div className="bg-gradient-to-r from-indigo-700 via-purple-700 to-blue-700 rounded-2xl p-6 mb-8 shadow-xl overflow-hidden relative">
-          <div className="absolute inset-0 opacity-10">
-            <div className="absolute top-4 right-8 text-[120px] leading-none select-none">🗓</div>
-          </div>
-          <div className="relative flex flex-col sm:flex-row sm:items-start justify-between gap-6">
-            <div>
-              <h2 className="text-2xl font-black text-white">Delhi & NCR Event Tracker</h2>
-              <p className="text-indigo-200 text-sm mt-1 max-w-lg">
-                {filteredEvents.length} upcoming events · Curated across Tech, Finance, Consulting, Entertainment & more.
-                Click any card for full details, ticket tiers, and a step-by-step booking guide.
-              </p>
-              <div className="flex flex-wrap gap-2 mt-3">
-                {["New Delhi", "Gurugram", "Noida", "Faridabad"].map((city) => (
-                  <button
-                    key={city}
-                    onClick={() => setSelectedArea(city)}
-                    className="text-xs bg-white/15 hover:bg-white/25 text-white px-2.5 py-1 rounded-full font-medium transition-colors"
-                  >
-                    📍 {city}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            {/* Hero countdown */}
-            {heroEvent && (
-              <div className="shrink-0 text-right">
-                <div className="text-indigo-200 text-xs font-semibold mb-2 uppercase tracking-wide">
-                  Next featured event
-                </div>
-                <div className="text-white text-xs font-bold mb-2 line-clamp-1">{heroEvent.name}</div>
-                <Countdown date={heroEvent.date} />
-              </div>
-            )}
-          </div>
-        </div>
-
-        {/* Stats */}
-        <StatsBar events={filteredEvents} savedCount={savedCount} />
-
-        {/* Filters */}
-        <FilterBar
-          selectedCategory={selectedCategory} setSelectedCategory={setSelectedCategory}
-          selectedArea={selectedArea} setSelectedArea={setSelectedArea}
-          selectedFormat={selectedFormat} setSelectedFormat={setSelectedFormat}
-          searchQuery={searchQuery} setSearchQuery={setSearchQuery}
-          sortBy={sortBy} setSortBy={setSortBy}
-          freeOnly={freeOnly} setFreeOnly={setFreeOnly}
-          savedOnly={savedOnly} setSavedOnly={setSavedOnly}
+      <div className="mx-auto flex max-w-[1600px]">
+        <Sidebar
+          view={view}
+          setView={setView}
+          selectedCategory={selectedCategory}
+          setSelectedCategory={setSelectedCategory}
+          categoryCounts={categoryCounts}
           savedCount={savedCount}
+          liveCount={liveCount}
+          sampleCount={sampleCount}
+          open={navOpen}
+          onClose={() => setNavOpen(false)}
         />
 
-        {/* Results row */}
-        <div className="flex items-center justify-between mb-5">
-          <p className="text-sm text-slate-500">
-            Showing <span className="font-bold text-slate-800">{filteredEvents.length}</span> events
-            {selectedCategory !== "all" && ` · ${selectedCategory.replace("-", " & ")}`}
-            {selectedArea !== "All Areas" && ` · ${selectedArea}`}
-            {freeOnly && " · Free only"}
-            {savedOnly && " · Saved"}
-          </p>
-          <div className="flex items-center gap-2">
-            {activeFilters && (
-              <button onClick={clearAll}
-                className="text-xs font-semibold text-slate-500 hover:text-red-600 border border-slate-200 hover:border-red-200 px-3 py-1 rounded-full transition-colors">
-                Clear all ✕
-              </button>
-            )}
-            <button
-              onClick={() => setShowInsights(!showInsights)}
-              className={`text-xs font-semibold px-3 py-1 rounded-full border transition-colors ${
-                showInsights ? "bg-indigo-600 text-white border-indigo-600" : "text-slate-600 border-slate-200 hover:border-indigo-300"
-              }`}
-            >
-              {showInsights ? "Hide" : "Show"} Insights
-            </button>
-          </div>
-        </div>
+        <main className="min-w-0 flex-1 px-4 py-6 sm:px-6">
+          {/* Data provenance notice — the most important thing on the page. */}
+          {LIVE_EVENT_COUNT === 0 && (
+            <div className="mb-6 rounded-xl border border-amber-200 bg-amber-50 p-4">
+              <h2 className="text-sm font-black text-amber-900">
+                ⚠ Showing sample data, not live listings
+              </h2>
+              <p className="mt-1 text-xs leading-relaxed text-amber-800">
+                No ticketing API is connected, so every event below is illustrative placeholder
+                content. These events are <strong>not confirmed to exist</strong>, and their
+                booking buttons run a web search rather than opening a purchase page. To show real
+                listings, add a <code className="rounded bg-amber-100 px-1">TICKETMASTER_API_KEY</code>{" "}
+                secret in your repository&apos;s GitHub Actions settings.
+              </p>
+            </div>
+          )}
 
-        {/* Insights panel (togglable, also shown in Insights view) */}
-        {(showInsights || viewMode === "insights") && (
-          <InsightsPanel events={filteredEvents} />
-        )}
-
-        {/* Main content */}
-        {filteredEvents.length === 0 ? (
-          <div className="text-center py-20">
-            <div className="text-5xl mb-4">🗓</div>
-            <div className="text-lg font-semibold text-slate-600">No events found</div>
-            <div className="text-sm text-slate-400 mt-1">Try adjusting your filters</div>
-            {activeFilters && (
-              <button onClick={clearAll} className="mt-4 text-sm font-semibold text-indigo-600 underline">
-                Clear all filters
-              </button>
-            )}
-          </div>
-        ) : viewMode === "calendar" ? (
-          <CalendarView events={filteredEvents} onOpenDetail={setSelectedEvent} />
-        ) : viewMode === "insights" ? (
-          <div className="text-center py-8 text-slate-400 text-sm">
-            Full insights shown above ↑ — switch to Grid or Timeline to browse events
-          </div>
-        ) : viewMode === "grid" ? (
-          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5">
-            {filteredEvents.map((event) => (
-              <EventCard key={event.id} event={event} onOpenDetail={setSelectedEvent} />
-            ))}
-          </div>
-        ) : (
-          /* Timeline */
-          <div className="space-y-10">
-            {Object.entries(grouped).map(([month, events]) => (
-              <div key={month}>
-                <div className="flex items-center gap-3 mb-5">
-                  <div className="h-px flex-1 bg-slate-200" />
-                  <h3 className="text-xs font-black text-slate-500 uppercase tracking-widest bg-white px-3 py-1 rounded-full border border-slate-200 shadow-sm">
-                    {month}
-                  </h3>
-                  <div className="h-px flex-1 bg-slate-200" />
-                </div>
-                <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5">
-                  {events.map((event) => (
-                    <EventCard key={event.id} event={event} onOpenDetail={setSelectedEvent} />
+          {/* Hero */}
+          <div className="relative mb-6 overflow-hidden rounded-2xl bg-gradient-to-r from-indigo-700 via-purple-700 to-blue-700 p-6 shadow-lg">
+            <div className="relative flex flex-col justify-between gap-6 sm:flex-row sm:items-start">
+              <div>
+                <h2 className="text-2xl font-black text-white">Delhi &amp; NCR Event Tracker</h2>
+                <p className="mt-1 max-w-lg text-sm text-indigo-200">
+                  {filteredEvents.length} upcoming events across Tech, Finance, Consulting,
+                  Entertainment and more. Open any card for ticket tiers and every route to a
+                  working booking page.
+                </p>
+                <div className="mt-3 flex flex-wrap gap-2">
+                  {["New Delhi", "Gurugram", "Noida", "Faridabad"].map((city) => (
+                    <button
+                      key={city}
+                      onClick={() => setSelectedArea(city)}
+                      className="rounded-full bg-white/15 px-2.5 py-1 text-xs font-medium text-white transition-colors hover:bg-white/25"
+                    >
+                      📍 {city}
+                    </button>
                   ))}
                 </div>
               </div>
-            ))}
+
+              {heroEvent && (
+                <div className="shrink-0 text-right">
+                  <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-indigo-200">
+                    Next up
+                  </div>
+                  <div className="mb-2 line-clamp-1 text-xs font-bold text-white">
+                    {heroEvent.name}
+                  </div>
+                  <Countdown date={heroEvent.date} />
+                </div>
+              )}
+            </div>
           </div>
-        )}
 
-        <footer className="mt-16 pt-8 border-t border-slate-200 text-center text-xs text-slate-400 space-y-1">
-          <div className="font-semibold text-slate-500">Delhi NCR Events Tracker</div>
-          <div>Events sourced from BookMyShow, Paytm Insider, Eventbrite, GDG, NASSCOM & official organisers · Refreshed daily</div>
-          <div>Last loaded: {format(lastRefresh, "EEEE, dd MMMM yyyy 'at' hh:mm a")}</div>
-        </footer>
-      </main>
+          <StatsBar events={filteredEvents} savedCount={savedCount} />
 
-      {/* Event detail modal */}
+          {view === "trending" ? (
+            <TrendingPanel
+              events={allUpcoming}
+              onSelectTag={(tag) => {
+                setSearchQuery(tag);
+                setView("discover");
+              }}
+              onOpenDetail={setSelectedEvent}
+            />
+          ) : view === "insights" ? (
+            <InsightsPanel events={filteredEvents} />
+          ) : (
+            <>
+              <FilterBar
+                selectedCategory={selectedCategory}
+                setSelectedCategory={setSelectedCategory}
+                selectedArea={selectedArea}
+                setSelectedArea={setSelectedArea}
+                selectedFormat={selectedFormat}
+                setSelectedFormat={setSelectedFormat}
+                searchQuery={searchQuery}
+                setSearchQuery={setSearchQuery}
+                sortBy={sortBy}
+                setSortBy={setSortBy}
+                freeOnly={freeOnly}
+                setFreeOnly={setFreeOnly}
+                savedOnly={view === "saved"}
+                setSavedOnly={(v) => setView(v ? "saved" : "discover")}
+                savedCount={savedCount}
+              />
+
+              <div className="mb-5 flex items-center justify-between gap-3">
+                <p className="text-sm text-slate-500">
+                  Showing <span className="font-bold text-slate-800">{filteredEvents.length}</span>{" "}
+                  events
+                  {view === "saved" && " · saved"}
+                  {selectedArea !== "All Areas" && ` · ${selectedArea}`}
+                  {freeOnly && " · free only"}
+                </p>
+                {activeFilters && (
+                  <button
+                    onClick={clearAll}
+                    className="rounded-full border border-slate-200 px-3 py-1 text-xs font-semibold text-slate-500 transition-colors hover:border-red-200 hover:text-red-600"
+                  >
+                    Clear filters ✕
+                  </button>
+                )}
+              </div>
+
+              {filteredEvents.length === 0 ? (
+                <div className="py-20 text-center">
+                  <div className="mb-4 text-5xl">🗓</div>
+                  <div className="text-lg font-semibold text-slate-600">
+                    {view === "saved" ? "No saved events yet" : "No events found"}
+                  </div>
+                  <div className="mt-1 text-sm text-slate-400">
+                    {view === "saved"
+                      ? "Tap the ☆ on any event card to save it here."
+                      : "Try adjusting your filters."}
+                  </div>
+                  {activeFilters && (
+                    <button
+                      onClick={clearAll}
+                      className="mt-4 text-sm font-semibold text-indigo-600 underline"
+                    >
+                      Clear all filters
+                    </button>
+                  )}
+                </div>
+              ) : view === "calendar" ? (
+                <CalendarView events={filteredEvents} onOpenDetail={setSelectedEvent} />
+              ) : (
+                <div className="space-y-10">
+                  {Object.entries(grouped).map(([month, events]) => (
+                    <section key={month}>
+                      <div className="mb-5 flex items-center gap-3">
+                        <div className="h-px flex-1 bg-slate-200" />
+                        <h3 className="rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-black uppercase tracking-widest text-slate-500 shadow-sm">
+                          {month}
+                        </h3>
+                        <div className="h-px flex-1 bg-slate-200" />
+                      </div>
+                      {eventGrid(events)}
+                    </section>
+                  ))}
+                </div>
+              )}
+            </>
+          )}
+
+          <footer className="mt-16 space-y-1 border-t border-slate-200 pt-8 text-center text-xs text-slate-400">
+            <div className="font-semibold text-slate-500">Delhi NCR Events Tracker</div>
+            <div>
+              Live listings come from connected ticketing APIs. Sample entries are illustrative and
+              unverified.
+            </div>
+            {lastRefresh && (
+              <div>Page loaded {format(lastRefresh, "EEEE, dd MMMM yyyy 'at' hh:mm a")}</div>
+            )}
+          </footer>
+        </main>
+      </div>
+
       {selectedEvent && (
         <EventModal event={selectedEvent} onClose={() => setSelectedEvent(null)} />
       )}
 
-      {/* AI Chat Assistant */}
       <ChatAssistant events={allUpcoming} onSelectEvent={setSelectedEvent} />
     </div>
   );

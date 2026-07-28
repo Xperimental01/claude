@@ -2,6 +2,7 @@
 import { Event, CATEGORY_META, TICKET_STATUS_META } from "@/types/event";
 import CategoryBadge from "./CategoryBadge";
 import Countdown from "./Countdown";
+import TrustBadge from "./TrustBadge";
 import { resolveTicketUrl, canBook } from "@/lib/ticket-resolver";
 import { useSavedEvents } from "@/hooks/useSavedEvents";
 import { format, parseISO, differenceInDays } from "date-fns";
@@ -88,6 +89,7 @@ export default function EventCard({
               {dayLabel}
             </span>
           )}
+          <TrustBadge event={event} size="xs" />
         </div>
 
         {/* Title + date */}

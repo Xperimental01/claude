@@ -27,6 +27,17 @@ export interface EventTicket {
   bookingSteps?: string[];
 }
 
+/**
+ * Where an event's data came from. This drives the trust badge in the UI.
+ *
+ * - "live-api"  → pulled from a real ticketing API at build time. Its ticket
+ *                 link points at a genuine, purchasable listing.
+ * - "sample"    → illustrative placeholder content authored for the demo.
+ *                 The event may not exist; its ticket link is a SEARCH, not a
+ *                 real listing page. Never present these as confirmed.
+ */
+export type SourceType = "live-api" | "sample";
+
 export interface Event {
   id: string;
   name: string;
@@ -47,6 +58,10 @@ export interface Event {
   imageUrl?: string;
   sourceUrl?: string;
   featured?: boolean;
+  /** Provenance. Defaults to "sample" when absent — fail closed, never fake trust. */
+  sourceType?: SourceType;
+  /** ISO timestamp of when this record was last confirmed against its source. */
+  lastVerified?: string;
 }
 
 export const TICKET_STATUS_META: Record<

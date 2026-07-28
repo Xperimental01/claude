@@ -689,20 +689,41 @@ export const DELHI_NCR_EVENTS: Event[] = [
   },
 ];
 
-const FETCHED_EVENTS = (fetchedEventsRaw as unknown as Event[]).map((e) => ({
+/**
+ * Events fetched from a real ticketing API at build time (scripts/fetch-events.mjs).
+ * These carry genuine, purchasable listing URLs, so they are tagged "live-api".
+ */
+const FETCHED_EVENTS: Event[] = (fetchedEventsRaw as unknown as Event[]).map((e) => ({
   ...e,
+  sourceType: "live-api" as const,
   ticket: {
     ...e.ticket,
     status: e.ticket.status ?? (e.ticket.available ? "available" : "closed"),
   },
 }));
 
+/**
+ * The hand-authored seed list above is ILLUSTRATIVE SAMPLE CONTENT. The events
+ * are plausible but unconfirmed — several are entirely invented — so their
+ * ticket "links" must never be presented as real purchasable listings. Tagging
+ * them "sample" makes the resolver fall back to a search URL and makes the UI
+ * show a "Sample data" badge instead of implying a verified booking page.
+ */
+const SAMPLE_EVENTS: Event[] = DELHI_NCR_EVENTS.map((e) => ({
+  ...e,
+  sourceType: "sample" as const,
+}));
+
+/** Live API records win over samples with the same name. */
 export const ALL_EVENTS: Event[] = [
-  ...DELHI_NCR_EVENTS,
-  ...FETCHED_EVENTS.filter(
-    (fe) => !DELHI_NCR_EVENTS.some((e) => e.name.toLowerCase() === fe.name.toLowerCase())
+  ...FETCHED_EVENTS,
+  ...SAMPLE_EVENTS.filter(
+    (se) => !FETCHED_EVENTS.some((fe) => fe.name.toLowerCase() === se.name.toLowerCase())
   ),
 ];
+
+export const LIVE_EVENT_COUNT = FETCHED_EVENTS.length;
+export const SAMPLE_EVENT_COUNT = ALL_EVENTS.length - FETCHED_EVENTS.length;
 
 export function getEventsByCategory(category: string, events: Event[]) {
   if (category === "all") return events;
