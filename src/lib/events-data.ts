@@ -1,5 +1,44 @@
 import { Event } from "@/types/event";
 import fetchedEventsRaw from "@/data/fetched-events.json";
+import buildInfo from "@/data/build-info.json";
+
+const MS_PER_DAY = 86_400_000;
+
+function toISODate(d: Date): string {
+  return d.toISOString().slice(0, 10);
+}
+
+function shiftISODate(iso: string, days: number): string {
+  const shifted = new Date(`${iso}T00:00:00Z`).getTime() + days * MS_PER_DAY;
+  return toISODate(new Date(shifted));
+}
+
+/**
+ * Sample events carry fixed calendar dates, which rot: once they fall into the
+ * past, getUpcomingEvents() filters them out and the dashboard empties.
+ *
+ * Every sample date is shifted by one shared offset, chosen so the earliest
+ * sample lands a few days after the build date. Using a single offset keeps the
+ * relative spacing of the original schedule intact.
+ *
+ * The offset derives from `buildInfo.builtOn`, a build-time constant, so the
+ * prerendered HTML and the hydrated client compute identical dates.
+ */
+const SAMPLE_LEAD_DAYS = 3;
+
+function sampleDateOffset(events: Event[]): number {
+  if (events.length === 0) return 0;
+  const earliest = events.reduce(
+    (min, e) => (e.date < min ? e.date : min),
+    events[0].date,
+  );
+  const earliestMs = new Date(`${earliest}T00:00:00Z`).getTime();
+  const targetMs =
+    new Date(`${buildInfo.builtOn}T00:00:00Z`).getTime() + SAMPLE_LEAD_DAYS * MS_PER_DAY;
+  const offset = Math.round((targetMs - earliestMs) / MS_PER_DAY);
+  // Only ever push stale dates forward; never drag a future schedule backwards.
+  return Math.max(0, offset);
+}
 
 export const DELHI_NCR_EVENTS: Event[] = [
   {
@@ -709,9 +748,24 @@ const FETCHED_EVENTS: Event[] = (fetchedEventsRaw as unknown as Event[]).map((e)
  * them "sample" makes the resolver fall back to a search URL and makes the UI
  * show a "Sample data" badge instead of implying a verified booking page.
  */
+const SAMPLE_OFFSET_DAYS = sampleDateOffset(DELHI_NCR_EVENTS);
+
 const SAMPLE_EVENTS: Event[] = DELHI_NCR_EVENTS.map((e) => ({
   ...e,
   sourceType: "sample" as const,
+  date: shiftISODate(e.date, SAMPLE_OFFSET_DAYS),
+  ...(e.endDate ? { endDate: shiftISODate(e.endDate, SAMPLE_OFFSET_DAYS) } : {}),
+  ticket: {
+    ...e.ticket,
+    ...(e.ticket.registrationDeadline
+      ? {
+          registrationDeadline: shiftISODate(
+            e.ticket.registrationDeadline,
+            SAMPLE_OFFSET_DAYS,
+          ),
+        }
+      : {}),
+  },
 }));
 
 /** Live API records win over samples with the same name. */
