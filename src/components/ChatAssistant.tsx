@@ -1,6 +1,6 @@
 "use client";
 import { useState, useRef, useEffect } from "react";
-import { Event, CATEGORY_META, TICKET_STATUS_META } from "@/types/event";
+import { Event, TICKET_STATUS_META } from "@/types/event";
 import { ChatMessage, getAIResponse } from "@/lib/ai-assistant";
 import { format, parseISO } from "date-fns";
 
@@ -68,11 +68,13 @@ export default function ChatAssistant({
     setInput("");
     setIsTyping(true);
 
+    // Fixed delay: the typing indicator should feel deliberate, and a random
+    // duration makes the component impure and its behaviour untestable.
     setTimeout(() => {
       const response = getAIResponse(msg.trim(), events);
       setMessages((prev) => [...prev, response]);
       setIsTyping(false);
-    }, 400 + Math.random() * 600);
+    }, 450);
   }
 
   function renderContent(content: string) {

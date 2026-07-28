@@ -1,5 +1,5 @@
 "use client";
-import { EventCategory, CATEGORY_META } from "@/types/event";
+import { CATEGORY_META } from "@/types/event";
 
 const AREAS = ["All Areas", "New Delhi", "Gurugram", "Noida", "Faridabad", "Ghaziabad"];
 const FORMATS = ["All Formats", "in-person", "hybrid", "online"];

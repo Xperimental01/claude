@@ -1,5 +1,5 @@
 "use client";
-import { useState, useEffect, useMemo } from "react";
+import { useState, useMemo } from "react";
 import { Event } from "@/types/event";
 import {
   ALL_EVENTS,
@@ -18,7 +18,15 @@ import Sidebar, { ViewMode } from "./Sidebar";
 import Countdown from "./Countdown";
 import ChatAssistant from "./ChatAssistant";
 import { useSavedEvents } from "@/hooks/useSavedEvents";
-import { format } from "date-fns";
+import buildInfo from "@/data/build-info.json";
+import { format, parseISO } from "date-fns";
+
+/**
+ * When the data was last rebuilt. This is what a user actually wants to know —
+ * page-load time says nothing about data freshness. Being a build-time constant
+ * it also renders identically on the server and after hydration.
+ */
+const BUILT_AT = parseISO(buildInfo.builtAt);
 
 function groupByMonth(events: Event[]): Record<string, Event[]> {
   const groups: Record<string, Event[]> = {};
@@ -38,7 +46,6 @@ function parseMinPrice(price?: string): number {
 }
 
 export default function Dashboard() {
-  const [lastRefresh, setLastRefresh] = useState<Date | null>(null);
   const [view, setView] = useState<ViewMode>("discover");
   const [selectedCategory, setSelectedCategory] = useState("all");
   const [selectedArea, setSelectedArea] = useState("All Areas");
@@ -49,10 +56,7 @@ export default function Dashboard() {
   const [selectedEvent, setSelectedEvent] = useState<Event | null>(null);
   const [navOpen, setNavOpen] = useState(false);
 
-  const { saved, isSaved, count: savedCount } = useSavedEvents();
-
-  // Rendered only after mount so server and client markup agree.
-  useEffect(() => setLastRefresh(new Date()), []);
+  const { isSaved, count: savedCount } = useSavedEvents();
 
   const allUpcoming = useMemo(() => getUpcomingEvents(ALL_EVENTS), []);
   const liveCount = useMemo(
@@ -97,7 +101,7 @@ export default function Dashboard() {
     return events;
   }, [
     allUpcoming, view, searchQuery, selectedCategory, selectedArea,
-    selectedFormat, freeOnly, sortBy, saved, isSaved,
+    selectedFormat, freeOnly, sortBy, isSaved,
   ]);
 
   const grouped = useMemo(() => groupByMonth(filteredEvents), [filteredEvents]);
@@ -146,9 +150,7 @@ export default function Dashboard() {
               <div className="mt-0.5 flex items-center gap-1.5">
                 <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-green-400" />
                 <p className="text-[10px] text-slate-500">
-                  {lastRefresh
-                    ? `Loaded ${format(lastRefresh, "dd MMM, hh:mm a")}`
-                    : "Loading…"}
+                  Data updated {format(BUILT_AT, "dd MMM, hh:mm a")}
                 </p>
               </div>
             </div>
@@ -331,9 +333,10 @@ export default function Dashboard() {
               Live listings come from connected ticketing APIs. Sample entries are illustrative and
               unverified.
             </div>
-            {lastRefresh && (
-              <div>Page loaded {format(lastRefresh, "EEEE, dd MMMM yyyy 'at' hh:mm a")}</div>
-            )}
+            <div>
+              Data last rebuilt {format(BUILT_AT, "EEEE, dd MMMM yyyy 'at' hh:mm a")} · refreshes
+              hourly
+            </div>
           </footer>
         </main>
       </div>
