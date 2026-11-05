@@ -1,6 +1,8 @@
 "use client";
 import { Event } from "@/types/event";
 import { getBookingRoutes, hasVerifiedListing } from "@/lib/ticket-resolver";
+import { appTargetFor, openBestTarget, storeUrlFor } from "@/lib/deeplinks";
+import { useIsMobile } from "@/hooks/useIsMobile";
 
 /**
  * Renders every route to a bookable page for an event, best-first.
@@ -13,11 +15,51 @@ export default function BookingHub({ event }: { event: Event }) {
   const routes = getBookingRoutes(event);
   const verified = hasVerifiedListing(event);
 
+  // Device detection reads navigator, so it comes from an external-store hook
+  // that returns false during the prerender — keeping hydration consistent.
+  const mobile = useIsMobile();
+
+  const hint = `${event.ticket.platform ?? ""} ${event.ticket.link ?? ""}`;
+  const appTarget = appTargetFor(hint);
+  const primaryUrl = routes[0]?.url;
+  const storeUrl = mobile ? storeUrlFor(hint) : null;
+
   return (
     <div>
       <h3 className="text-xs font-black uppercase tracking-wider text-slate-500">
         Where to book
       </h3>
+
+      {/* On a phone, offer the platform's own app first — it is where the
+          user is signed in and where payment is one tap. */}
+      {mobile && appTarget && primaryUrl && (
+        <div className="mt-2 rounded-lg border border-indigo-200 bg-indigo-50 p-3">
+          <p className="text-xs font-bold text-indigo-900">
+            Open in the {appTarget.target.app} app
+          </p>
+          <p className="mt-0.5 text-[11px] leading-relaxed text-indigo-700">
+            Switches to the app if it is installed, and falls back to the website otherwise.
+          </p>
+          <div className="mt-2 flex flex-wrap gap-2">
+            <button
+              onClick={() => openBestTarget(primaryUrl, hint)}
+              className="rounded-lg bg-indigo-600 px-3 py-1.5 text-xs font-bold text-white transition-colors hover:bg-indigo-700"
+            >
+              📱 Open {appTarget.target.app}
+            </button>
+            {storeUrl && (
+              <a
+                href={storeUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="rounded-lg border border-indigo-200 bg-white px-3 py-1.5 text-xs font-bold text-indigo-700 transition-colors hover:border-indigo-300"
+              >
+                Get the app ↗
+              </a>
+            )}
+          </div>
+        </div>
+      )}
 
       {!verified && (
         <div className="mt-2 rounded-lg border border-amber-200 bg-amber-50 p-3">

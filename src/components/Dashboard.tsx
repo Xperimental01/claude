@@ -1,5 +1,6 @@
 "use client";
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect, useRef } from "react";
+import Link from "next/link";
 import { Event } from "@/types/event";
 import {
   ALL_EVENTS,
@@ -17,7 +18,10 @@ import TrendingPanel from "./TrendingPanel";
 import Sidebar, { ViewMode } from "./Sidebar";
 import Countdown from "./Countdown";
 import ChatAssistant from "./ChatAssistant";
+import LiveStatusBar from "./LiveStatusBar";
 import { useSavedEvents } from "@/hooks/useSavedEvents";
+import { useLiveEvents } from "@/hooks/useLiveEvents";
+import { useNotifications, describeChange } from "@/hooks/useNotifications";
 import buildInfo from "@/data/build-info.json";
 import { format, parseISO } from "date-fns";
 
@@ -57,6 +61,25 @@ export default function Dashboard() {
   const [navOpen, setNavOpen] = useState(false);
 
   const { isSaved, count: savedCount } = useSavedEvents();
+
+  // Live monitoring: poll the published feed and surface what changed.
+  const {
+    changes, lastChecked, checking, error: liveError, check, dismissChanges,
+  } = useLiveEvents(ALL_EVENTS);
+  const { permission, request: requestAlerts, notify } = useNotifications();
+
+  // Fire a desktop notification for each newly-observed change exactly once.
+  const announced = useRef(new Set<string>());
+  useEffect(() => {
+    if (permission !== "granted") return;
+    for (const c of changes) {
+      const key = `${c.eventId}:${c.at}:${c.kind}`;
+      if (announced.current.has(key)) continue;
+      announced.current.add(key);
+      const { title, body } = describeChange(c);
+      notify(title, body, c.eventId);
+    }
+  }, [changes, permission, notify]);
 
   const allUpcoming = useMemo(() => getUpcomingEvents(ALL_EVENTS), []);
   const liveCount = useMemo(
@@ -191,12 +214,28 @@ export default function Dashboard() {
               <p className="mt-1 text-xs leading-relaxed text-amber-800">
                 No ticketing API is connected, so every event below is illustrative placeholder
                 content. These events are <strong>not confirmed to exist</strong>, and their
-                booking buttons run a web search rather than opening a purchase page. To show real
-                listings, add a <code className="rounded bg-amber-100 px-1">TICKETMASTER_API_KEY</code>{" "}
-                secret in your repository&apos;s GitHub Actions settings.
+                booking buttons run a web search rather than opening a purchase page.
               </p>
+              <Link
+                href="/requirements"
+                className="mt-3 inline-flex items-center gap-1.5 rounded-lg bg-amber-600 px-3 py-1.5 text-xs font-bold text-white transition-colors hover:bg-amber-700"
+              >
+                See exactly what I need from you →
+              </Link>
             </div>
           )}
+
+          <LiveStatusBar
+            checking={checking}
+            lastChecked={lastChecked}
+            error={liveError}
+            changes={changes}
+            permission={permission}
+            onEnableAlerts={requestAlerts}
+            onRefresh={check}
+            onDismiss={dismissChanges}
+            liveSourceConnected={LIVE_EVENT_COUNT > 0}
+          />
 
           {/* Hero */}
           <div className="relative mb-6 overflow-hidden rounded-2xl bg-gradient-to-r from-indigo-700 via-purple-700 to-blue-700 p-6 shadow-lg">

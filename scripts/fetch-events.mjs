@@ -6,17 +6,43 @@
  * Requires env var: TICKETMASTER_API_KEY
  */
 
-import { writeFileSync } from "fs";
+import { writeFileSync, mkdirSync, readFileSync } from "fs";
 import { fileURLToPath } from "url";
 import path from "path";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const OUT_FILE = path.join(__dirname, "../src/data/fetched-events.json");
 
+/**
+ * The same feed is also emitted into public/ so it ships as a static asset.
+ * The bundled copy renders the first paint; this copy is what the live-refresh
+ * poller re-fetches in the browser to pick up changes between page loads.
+ */
+const PUBLIC_OUT_FILE = path.join(__dirname, "../public/data/fetched-events.json");
+
+function writeFeed(events) {
+  const json = JSON.stringify(events, null, 2);
+  writeFileSync(OUT_FILE, json);
+  mkdirSync(path.dirname(PUBLIC_OUT_FILE), { recursive: true });
+  writeFileSync(PUBLIC_OUT_FILE, json);
+}
+
 const API_KEY = process.env.TICKETMASTER_API_KEY;
 
 if (!API_KEY) {
-  console.warn("TICKETMASTER_API_KEY not set — skipping fetch, keeping existing data.");
+  // Still publish the static copy. The browser poller fetches it on a timer,
+  // and a missing file would mean a 404 on every tick rather than a quiet
+  // "nothing new". Mirror whatever is already bundled, or an empty feed.
+  let existing = [];
+  try {
+    existing = JSON.parse(readFileSync(OUT_FILE, "utf8"));
+  } catch {
+    existing = [];
+  }
+  writeFeed(existing);
+  console.warn(
+    `TICKETMASTER_API_KEY not set — no live fetch. Published ${existing.length} existing record(s) so the poller has a target.`,
+  );
   process.exit(0);
 }
 
@@ -111,8 +137,8 @@ async function fetchEvents() {
   }
 
   events.sort((a, b) => new Date(a.date) - new Date(b.date));
-  writeFileSync(OUT_FILE, JSON.stringify(events, null, 2));
-  console.log(`\nWrote ${events.length} total events to ${OUT_FILE}`);
+  writeFeed(events);
+  console.log(`\nWrote ${events.length} total events to ${OUT_FILE} and ${PUBLIC_OUT_FILE}`);
 }
 
 fetchEvents();

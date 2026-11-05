@@ -1,5 +1,6 @@
 "use client";
-import { CATEGORY_META, EventCategory } from "@/types/event";
+import Link from "next/link";
+import { CATEGORY_META, CATEGORY_GROUPS, categoriesInGroup } from "@/types/event";
 
 export type ViewMode = "discover" | "trending" | "calendar" | "insights" | "saved";
 
@@ -36,10 +37,6 @@ export default function Sidebar({
   open,
   onClose,
 }: SidebarProps) {
-  const categories = Object.entries(CATEGORY_META) as Array<
-    [EventCategory, (typeof CATEGORY_META)[EventCategory]]
-  >;
-
   return (
     <>
       {/* Mobile scrim */}
@@ -111,30 +108,42 @@ export default function Sidebar({
                 <span className="flex-1">All events</span>
               </button>
             </li>
-            {categories.map(([key, meta]) => {
-              const count = categoryCounts[key] ?? 0;
-              const active = selectedCategory === key;
-              return (
-                <li key={key}>
-                  <button
-                    onClick={() => setSelectedCategory(key)}
-                    disabled={count === 0}
-                    className={`flex w-full items-center gap-2.5 rounded-lg px-2.5 py-1.5 text-left text-xs font-semibold transition-colors ${
-                      active
-                        ? "bg-slate-900 text-white"
-                        : count === 0
-                          ? "cursor-not-allowed text-slate-300"
-                          : "text-slate-600 hover:bg-slate-100"
-                    }`}
-                  >
-                    <span>{meta.icon}</span>
-                    <span className="flex-1 truncate">{meta.label}</span>
-                    <span className={active ? "text-white/70" : "text-slate-400"}>{count}</span>
-                  </button>
-                </li>
-              );
-            })}
           </ul>
+
+          {/* Grouped, and groups with nothing in them are hidden: 28 flat rows
+              would bury the categories that actually have events. */}
+          {CATEGORY_GROUPS.map((group) => {
+            const cats = categoriesInGroup(group).filter((c) => (categoryCounts[c] ?? 0) > 0);
+            if (cats.length === 0) return null;
+            return (
+              <div key={group} className="mt-3">
+                <p className="px-2 pb-1 text-[9px] font-black uppercase tracking-wider text-slate-300">
+                  {group}
+                </p>
+                <ul className="space-y-0.5">
+                  {cats.map((key) => {
+                    const meta = CATEGORY_META[key];
+                    const count = categoryCounts[key] ?? 0;
+                    const active = selectedCategory === key;
+                    return (
+                      <li key={key}>
+                        <button
+                          onClick={() => setSelectedCategory(key)}
+                          className={`flex w-full items-center gap-2.5 rounded-lg px-2.5 py-1.5 text-left text-xs font-semibold transition-colors ${
+                            active ? "bg-slate-900 text-white" : "text-slate-600 hover:bg-slate-100"
+                          }`}
+                        >
+                          <span>{meta.icon}</span>
+                          <span className="flex-1 truncate">{meta.label}</span>
+                          <span className={active ? "text-white/70" : "text-slate-400"}>{count}</span>
+                        </button>
+                      </li>
+                    );
+                  })}
+                </ul>
+              </div>
+            );
+          })}
 
           {/* Data provenance summary — always visible, never buried. */}
           <div className="mt-5 rounded-lg border border-slate-200 bg-slate-50 p-3">
@@ -159,10 +168,15 @@ export default function Sidebar({
             </dl>
             {liveCount === 0 && (
               <p className="mt-2 text-[10px] leading-relaxed text-slate-500">
-                No live feed connected. Add a ticketing API key in GitHub Actions to replace
-                sample data with real listings.
+                No live feed connected — events shown are samples.
               </p>
             )}
+            <Link
+              href="/requirements"
+              className="mt-2 block rounded-md bg-indigo-600 px-2 py-1.5 text-center text-[10px] font-bold text-white transition-colors hover:bg-indigo-700"
+            >
+              What I need from you →
+            </Link>
           </div>
         </nav>
       </aside>
